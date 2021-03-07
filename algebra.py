@@ -175,7 +175,7 @@ class Cummulative():
         self.args = tuple(terms)
     
     
-#----------------------------------------------------
+
 class Expr:
     def __init__(self):
         self._mhash = None
@@ -202,7 +202,7 @@ class Expr:
         return not(self == other)
         
     def __neg__(self):
-        return Mult(-1,self)
+        return -1*self
     
     def __add__(self, other):
 
@@ -223,10 +223,10 @@ class Expr:
         return  self + other 
     
     def __sub__(self, other):
-        return Plus(self, -1*other)
+        return self + -1*other
     
     def __rsub__(self, other):
-        return Plus(-1*self, other)
+        return -1*self + other
     
     def __pow__(self, other):
         if isinstance(self,Serie):
@@ -235,7 +235,7 @@ class Expr:
             return ScalPow(self, other)
     
     def __rpow__(self,other): 
-        return ScalPow(other,self)
+        return other**self
     
     def __mul__(self, other):
         if is_scalar(self) and is_scalar(other):
@@ -270,7 +270,7 @@ class Expr:
             
     
         
-#---------------------------------------------------------------------
+
     
     
 class Scalar(Expr):
@@ -400,8 +400,6 @@ class ScalPow(Expr):
                 exp_string = '{' + exp_string +'}'
             return base_string + '^' + exp_string
     
-    #def val(self):
-    #    return self.base.val()**self.exp.val()
     
     def sympy(self):
         return sp.Pow(sympy(self.base), sympy(self.exp))
@@ -435,10 +433,6 @@ class ScalPow(Expr):
                 
 
             
-
-        
-        
-#-------------------------------------------------------------------------
 
 class Mult(Expr, Associative, Commutative, Identity, Cummulative, 
               NullElement):
@@ -475,7 +469,7 @@ class Mult(Expr, Associative, Commutative, Identity, Cummulative,
         denom = ''
 
         for p, b in s:
-            "arreglar la suma con mult "
+
             if isinstance(b,Plus): 
                 b_str = '(' + repr(b) + ')' 
             elif b == -1 :
@@ -582,7 +576,6 @@ class Mult(Expr, Associative, Commutative, Identity, Cummulative,
 class Plus(Expr, Associative, Commutative, Identity, Cummulative):
     
     def __new__(cls, *args):
-        #print(args,list(all(map(is_scalar, args)),"args"))
         if not all(map(is_scalar, args)):
             raise TypeError('Plus should only involve Scalar objects.')
         instance = super(Plus, cls).__new__(cls)
@@ -696,11 +689,9 @@ def _sum_by_order(terms):
     return by_order
 
 def dependency(exp,coordinate): 
-    #print(exp,type(exp),"depen")
     if is_number(exp): 
         return False 
     if isinstance(exp,Scalar):
-        #print(exp,coordinate,"comparation")
         if exp == coordinate: 
             return True
         else: 
@@ -717,9 +708,7 @@ def dependency(exp,coordinate):
 
 def get_order_by_variable(expr,variable): 
     expr=expand(expr)
-    #print(expr,type(expr),variable,type(variable),"conflicto")
     if not dependency(expr,variable): 
-        #print("hola")
         return [(0,expr)]
     else: 
         if isinstance(expr,Scalar): 
@@ -734,9 +723,7 @@ def get_order_by_variable(expr,variable):
         elif isinstance(expr,Plus): 
             terms=[get_order_by_variable(f,variable)[0] for f in expr.args]
             terms.sort(key=lambda tup: tup[0])
-            #print(terms)
             by_order= _sum_by_order(terms)
-            #print(by_order)
             return by_order
     
 def _variables(exp): 
@@ -777,7 +764,7 @@ class Serie(Expr):
         
     def __repr__(self): 
         return  ' + '.join(repr(self.args[arg]) for arg in self.args) +\
-                                            ' + O(ϵ^%s)'%(self.order)#args[1]#self.args[arg]
+                                            ' + O(ϵ^%s)'%(self.order)
     
     def search_dependency(self,args):
         variables=[ ]
@@ -931,15 +918,6 @@ class MultSeries(Serie):
     
     
     
-#restar series operator over
-#mult por algo que no es serie 
 
-#expandir una division 
-#potencia entera de una serie 
-
-#invertir metrica 
-#recordar orden que yo quiera 
-
-#christofell y comparo  
 
         
