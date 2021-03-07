@@ -1,6 +1,12 @@
+
 """
-22:21:55 26-02-2012
+Created on Fri Feb 26 22:21:55 2021
+
+@authors: Joaquín Rohland and Jorge Noreña  
+
 """
+
+
 
 import sympy as sp
 
