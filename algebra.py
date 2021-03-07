@@ -357,14 +357,6 @@ class ScalPow(Expr):
         self.exp = self.args[1]
         
     def __repr__(self):
-        """
-        falta revisar cuando la base es mult y plus <--malo
-        >> 2**(x*y)
-        print --> 2^y*x 
-        debe ser :2^(y*x) --> listo 
-        falta implementar Scalars negativos: hacer mult
-        
-        """
         if is_number(self.base):
             base_string = str(self.base)
         else:
