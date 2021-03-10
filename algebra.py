@@ -10,6 +10,7 @@ Created on Fri Feb 26 22:21:55 2021
 
 import sympy as sp
 
+
 symbol_dict = {}
 
 def scalars(names):
@@ -96,8 +97,6 @@ def derived(exp,coordinate):
         return exp.derived(coordinate)
     except AttributeError:
         return 0
-    
-
 
     
 def _distribute_terms(terms):
@@ -132,9 +131,18 @@ class Associative():
         
 class Commutative():  
 
-    def make_commutative(self):
+   def make_commutative(self,tensors=False):
         constlist = list(filter(is_number, self.args))
-        arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
+        if not tensors:
+            arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
+        else: 
+            Scallist = sorted(self.get_args_Scalar(notNum=True), key=hash)
+            scallist = sorted(self.get_args_tensors(scalars=True), key=hash)
+            tenslist = sorted(self.get_args_tensors(others=True), key=hash)
+            Scallist.extend(scallist)
+            Scallist.extend(tenslist)
+            arglist = Scallist
+
         if len(constlist) > 0:
             number = self._number_version(*constlist)
             arglist.insert(0,number) 
@@ -153,25 +161,33 @@ class NullElement():
     
     
 class Cummulative():
+    """
+    preguntar si se ve bien con la nueva funcion aux(tensors)
+    """
     
-    def simplify(self, repeated, operate, separate):
+    def simplify(self, repeated, operate, separate,tensors=False):
         previous = None
         c = None
         terms = []
         def key(term):
             ci, t  = separate(term)
             return hash(t)
+        def aux(tensors):
+            if tensors and not is_scalar(previous):
+                terms.append(previous)
+            else: 
+                terms.append(repeated(previous, c))
         args = sorted(self.args, key=key)
         for term in args:
             ci, current = separate(term)
             if current != previous:
                 if previous != None:
-                    terms.append(repeated(previous, c))
+                    aux(tensors)
                 c = ci
                 previous = current
             else:
                 c = operate(c, ci)
-        terms.append(repeated(previous, c))
+        aux(tensors)
         self.args = tuple(terms)
     
     
