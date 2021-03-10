@@ -1,3 +1,13 @@
+
+"""
+Created on Sun Mar 7 16:03:23 2021
+
+@authors: Joaquín Rohland and Jorge Noreña  
+
+"""
+
+
+
 from algebra import Expr, ScalPow, Mult,  Plus
 from algebra import Associative,Commutative,Identity,Cummulative,NullElement
 from algebra import is_scalar, is_number,is_not_number, prod
@@ -229,7 +239,10 @@ class Contraction(ValidStructure):
         new_inds= tuple(f[0] for f in ordered)
         self.indices= new_inds
         #else:
+        #re construccion de elementos para elementos de mult 
+        #tensores y derivadas  
         #    new_args=[]
+
 
 
 
@@ -243,7 +256,10 @@ class Tensor(Expr,Contraction):
     def latex(self)
     
     agregar coordenadas 
-
+    
+    cuando se tome una derivada normal se debe introduccir las 
+    coordenadas del tensore tambien debo hacerlo si pasa esto ? 
+    deriv(Scalar(x)tensor(h,i_0),x )  
     """
 
     def __init__(self,name,*indices, coordinate = [] ):
@@ -285,12 +301,20 @@ class Tensor(Expr,Contraction):
                 
     def get_name(self):
         return self.name
+
+
+
+#########preguntar por class TensPow 
                 
 
 class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative, 
               NullElement):
     # Associative, Commutative, Identity, Cummulative, 
     #NullElement
+
+    #preguntar por las modificaciones al archivo algebra 
+    
+
     """
     no olvidar que falta implementar class metric 
     que me sube y baja los indices, esto es importante para comparar 
