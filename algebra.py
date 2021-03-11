@@ -120,6 +120,18 @@ def _distribute_terms(terms):
     
 class Associative():   
     
+    def make_associative_tensors(self): 
+        from tensors import PlusTensors, MultTensors, Tensor
+        new_args = []
+        for a in self.args:
+            if isinstance(self,PlusTensors) == type(a):
+                new_args.extend(a.args)
+            elif isinstance(self,MultTensors)==type(a):
+                new_args.extend(a.args)
+            else:
+                new_args.append(a)
+        self.args = tuple(new_args)
+    
     def make_associative(self):    
         new_args = []
         for a in self.args:
@@ -136,7 +148,7 @@ class Commutative():
         if not tensors:
             arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
         else: 
-            Scallist = sorted(self.get_args_Scalar(notNum=True), key=hash)
+            Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
             scallist = sorted(self.get_args_tensors(scalars=True), key=hash)
             tenslist = sorted(self.get_args_tensors(others=True), key=hash)
             Scallist.extend(scallist)
@@ -164,31 +176,44 @@ class Cummulative():
     """
     preguntar si se ve bien con la nueva funcion aux(tensors)
     """
+
+
+    def simplify_tens(self, repeated, operate, separate):
+        terms = list(self.get_args_tensors(others=True))
+        argsscal = list(self.get_args_tensors(scalars=True))
+        argsScal = list(self.get_args_Scalars())       
+        if len(argsscal)==0 and len(argsScal)==0:
+            return tuple(terms)
+        def key(term):
+            ci, t  = separate(term)
+            return hash(t)
+        argstot = sorted((argsscal + argsScal), key=key)
+        scalterms = list(self.simplify(repeated, operate, separate,argstot))
+        scalterms.extend(terms)
+        return tuple(scalterms)
+
+        
     
-    def simplify(self, repeated, operate, separate,tensors=False):
+   
+    def simplify(self, repeated, operate, separate,args):
         previous = None
         c = None
         terms = []
         def key(term):
             ci, t  = separate(term)
             return hash(t)
-        def aux(tensors):
-            if tensors and not is_scalar(previous):
-                terms.append(previous)
-            else: 
-                terms.append(repeated(previous, c))
-        args = sorted(self.args, key=key)
+        args = sorted(args, key=key)
         for term in args:
             ci, current = separate(term)
             if current != previous:
                 if previous != None:
-                    aux(tensors)
+                    terms.append(repeated(previous, c))
                 c = ci
                 previous = current
             else:
                 c = operate(c, ci)
-        aux(tensors)
-        self.args = tuple(terms)
+        terms.append(repeated(previous, c))
+        return tuple(terms)
     
     
 
@@ -259,7 +284,7 @@ class Expr:
         
         elif isinstance(self,Serie) or isinstance(other,Serie) :
             return MultSeries(self,other)
-        
+
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
                                 type(self).__name__ + ' and ' +\
@@ -455,8 +480,8 @@ class Mult(Expr, Associative, Commutative, Identity, Cummulative,
         instance.make_associative()
         if instance.is_null():
             return 0
-        instance.simplify(ScalPow, lambda a, b: a + b,
-                          instance._separate_exp)
+        instance.args = instance.simplify(ScalPow,lambda a, b: a + b,
+                                        instance._separate_exp,instance.args)
         instance.ignore_identity()
         instance.make_commutative()
         if len(instance.args) == 1:
@@ -593,8 +618,8 @@ class Plus(Expr, Associative, Commutative, Identity, Cummulative):
         instance.ignore_identity()
         if len(instance.args)==0: 
             return 0
-        instance.simplify(Mult, instance._number_version, 
-                          instance._separate_num)
+        instance.args = instance.simplify(Mult,instance._number_version,
+                                        instance._separate_num,instance.args)
         instance.make_commutative()
         if len(instance.args) == 1:
             return instance.args[0]
