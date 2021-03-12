@@ -322,8 +322,10 @@ class Tensor(Expr,Contraction):
 
         elif isinstance(self,Tensor) or isinstance(other,Tensor):
             return MultTensors(self,other)
-        #elif is_number(other):
-        #    return MultTensors(*self.args,other)   
+        
+        elif is_scalar(self) and is_scalar(other): 
+            return MultTensors(self,other)
+
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
                                 type(self).__name__ + ' and ' +\
@@ -339,13 +341,19 @@ class Tensor(Expr,Contraction):
         if other == 0:
             return self
 
-        if not _check_tensor(self):
+        if not _check_tensor(self) or not _check_tensor(other) :
             if _check_tensor(other) and is_scalar(other):
                 return PlusTensors(self, other)
+            elif _check_tensor(self) and is_scalar(self):
+                return PlusTensors(self, other)
+
             else:
                 raise TypeError("unsupported operand type(s) for *: "+\
                                     type(self).__name__ + ' and '+\
                                         type(other).__name__)  
+
+        elif isinstance(self,Tensor) or isinstance(other,Tensor):
+            return MultTensors(self,other)
 #
         #
         #elif _check_tensor(other):
@@ -427,6 +435,7 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
                                     instance._separate_exp)
         instance.ignore_identity()
         instance.make_commutative(tensors=True)
+        if len(instance.args)==1: return instance.args[0]
         return instance
         
     def __init__(self,*args): 
@@ -445,44 +454,44 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         return name
              
 
-    #def __repr__(self):
-    #    s = [self._separate_exp(a) for a in self.args]
-    #    numer = ''
-    #    denom = ''
-    # 
-    #    for p, b in s:
-    #
-    #        if isinstance(b,Plus): 
-    #            b_str = '(' + repr(b) + ')' 
-    #        elif b == -1 :
-    #            b_str = "-" 
-    #        else:
-    #            b_str = str(b) if is_number(b) else repr(b)           
-    #        if is_number(p) and p < 0:
-    #            if p == -1:
-    #                denom += b_str
-    #            else:
-    #                p_str = str(-p)
-    #                denom += ' ' + b_str + '^' + p_str
-    #        else:
-    #            if p == 1:
-    #                numer += ' ' + b_str
-    #            else:
-    #                p_str = str(p) if is_number(p) else repr(p)
-    #                numer += ' ' + b_str + '^' + p_str
-    #
-    #    if len(numer) == 0:
-    #        numer = str(1)
-    #    else:
-    #        numer = numer[1:]
-    #
-    #    if len(denom) == 0:
-    #        return numer
-    #    else:
-    #        return '(' + numer + '/(' + denom + '))' 
-
     def __repr__(self):
-        return '*'.join(str(arg) for arg in self.args)    
+        s = [self._separate_exp(a) for a in self.args]
+        numer = ''
+        denom = ''
+     
+        for p, b in s:
+    
+            if isinstance(b,PlusTensors): 
+                b_str = '(' + repr(b) + ')' 
+            elif b == -1 :
+                b_str = "-" 
+            else:
+                b_str = str(b) if is_number(b) else repr(b)           
+            if is_number(p) and p < 0:
+                if p == -1:
+                    denom += b_str
+                else:
+                    p_str = str(-p)
+                    denom += ' ' + b_str + '^' + p_str
+            else:
+                if p == 1:
+                    numer += ' ' + b_str
+                else:
+                    p_str = str(p) if is_number(p) else repr(p)
+                    numer += ' ' + b_str + '^' + p_str
+    
+        if len(numer) == 0:
+            numer = str(1)
+        else:
+            numer = numer[1:]
+    
+        if len(denom) == 0:
+            return numer
+        else:
+            return '(' + numer + '/(' + denom + '))' 
+
+    #def __repr__(self):
+    #    return '*'.join(str(arg) for arg in self.args)    
 
     def _separate_exp(self, term):
         return Mult._separate_exp(self, term )
@@ -522,7 +531,6 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         instance = super(PlusTensors, cls).__new__(cls)
         instance._identity_ = 0
         instance.args = args
-        
         instance.make_associative_tensors()
         instance.ignore_identity()
         if len(instance.args)==0: 
@@ -560,7 +568,7 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         
     def __repr__(self):
         l = [(str(a) if is_number(a) else repr(a)) for a in self.args]
-        return ' + '.join(l)
+        return ' + '.join(l) 
      
     def _scalar_version(self, *args):
         return Plus(*args)

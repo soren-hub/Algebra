@@ -154,6 +154,7 @@ class Commutative():
             Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
             scallist = sorted(self.get_args_tensors(scalars=True), key=hash)
             tenslist = sorted(self.get_args_tensors(others=True), key=hash)
+            #print(Scallist,"A",scallist,"b",tenslist,"c")
             Scallist.extend(scallist)
             Scallist.extend(tenslist)
             arglist = Scallist
@@ -161,6 +162,7 @@ class Commutative():
         if len(constlist) > 0:
             number = self._number_version(*constlist)
             arglist.insert(0,number) 
+
         self.args=  tuple(arglist)
 
 class Identity():
@@ -191,7 +193,6 @@ class Cummulative():
             ci, t  = separate(term)
             return hash(t)
         argstot = sorted((argsscal + argsScal), key=key)
-        print(argstot)
         scalterms = list(self.simplify(repeated, operate, separate, argstot))
         scalterms.extend(terms)
         return tuple(scalterms)
@@ -210,7 +211,6 @@ class Cummulative():
                 ci, t  = separate(term)
                 return hash(t)
             args = sorted(args, key=key)
-        #print(args,type(self),self.args,"args")
         for term in args:
             ci, current = separate(term)
             if current != previous:
@@ -219,7 +219,6 @@ class Cummulative():
                 c = ci
                 previous = current
             else:
-                #print(c,ci,operate(c, ci),term,"info")
                 c = operate(c, ci)
         terms.append(repeated(previous, c))
         return tuple(terms)
@@ -255,7 +254,6 @@ class Expr:
         return -1*self
     
     def __add__(self, other):
-        #print(type(self),type(other))
         from tensors import _check_tensor, PlusTensors
         if other == 0:
             return self
@@ -295,15 +293,16 @@ class Expr:
     
     def __mul__(self, other):
         from tensors import _check_tensor, MultTensors
-        if is_scalar(self) and is_scalar(other):
+
+        if _check_tensor(self) or _check_tensor(other):        
+            return MultTensors(self,other)
+
+        elif is_scalar(self) and is_scalar(other):
             return Mult(self, other)
         
         elif isinstance(self,Serie) or isinstance(other,Serie) :
             return MultSeries(self,other)
         
-        #elif _check_tensor(self) or _check_tensor(other):        
-        #    return MultTensors(*self.args,other)
-
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
                                 type(self).__name__ + ' and ' +\
@@ -415,6 +414,8 @@ class ScalPow(Expr):
         self.scalar = True
         self.base = self.args[0]
         self.exp = self.args[1]
+        self.is_tensor = self.is_tensor()
+
         
     def __repr__(self):
         if is_number(self.base):
@@ -452,7 +453,16 @@ class ScalPow(Expr):
                 exp_string = '{' + exp_string +'}'
             return base_string + '^' + exp_string
     
-    
+    def is_tensor(self): 
+        from tensors import _check_tensor
+        return _check_tensor(self.base)
+
+    def get_indices(self): 
+        if self.is_tensor : 
+            return self.base.get_indices()
+        else:
+            return False 
+
     def sympy(self):
         return sp.Pow(sympy(self.base), sympy(self.exp))
     
@@ -648,7 +658,6 @@ class Plus(Expr, Associative, Commutative, Identity, Cummulative):
             return instance
     
     def __init__(self, *args):
-        #print(self.args)
         self.scalar = True
         self._mhash = None 
 
