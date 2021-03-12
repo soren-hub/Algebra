@@ -144,7 +144,6 @@ class ValidStructure:
             for f in self.args:
                 notFree = f.not_free_index()
                 inds=list(sorted(notFree,key=lambda x:x.get_name()))
-                print(aux,inds)
                 if aux==None:
                     aux=inds
                 elif aux !=inds :
@@ -257,13 +256,6 @@ class Contraction(ValidStructure):
         self.valid_index_structure()
         
 
-
-
-
-
-        
-
-
 class Tensor(Expr,Contraction):
     """
     falta: 
@@ -296,7 +288,7 @@ class Tensor(Expr,Contraction):
     def __repr__(self):
         name = self.name
         inds = self.indices
-        return  self.indices[0] if len(inds) == 1 else name + repr(inds)
+        return  name + repr(inds) if len(inds) > 1 else  name+repr(inds[0])
 
     def is_scalar(self):
         inds = self.get_indices()
@@ -317,6 +309,8 @@ class Tensor(Expr,Contraction):
     def __mul__(self, other):    
         if isinstance(self,Tensor) or isinstance(other,Tensor):
             return MultTensors(self,other)
+        #elif is_number(other):
+        #    return MultTensors(*self.args,other)   
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
                                 type(self).__name__ + ' and ' +\
@@ -340,13 +334,12 @@ class Tensor(Expr,Contraction):
                                     type(self).__name__ + ' and ' +\
                                         type(other).__name__)  
 
-        elif _check_tensor(self) and _check_tensor(other):
-            if isinstance(self,PlusTensors): 
+        
+        elif _check_tensor(other):
+            if isinstance(self,PlusTensors) :
                 return PlusTensors(*self.args, other)
-            elif isinstance(other,PlusTensors):
-                return PlusTensors(self, *other.args)
-            else:
-                return PlusTensors(self, other)
+            else: 
+                return PlusTensors(self, other) 
 
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
@@ -354,7 +347,7 @@ class Tensor(Expr,Contraction):
                         type(other).__name__)
 
     def __radd__(self, other):
-        return  self + other 
+        return  self + other
 
     def __sub__(self, other):
         return self + -1*other
@@ -407,6 +400,8 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
     """
   
     def __new__(cls, *args):
+        if len(args) <= 1 :
+            return 0 if len(args)==0 else args[0]
         instance = super(MultTensors, cls).__new__(cls)
         instance._identity_ = 1
         instance._null_ = 0
@@ -424,6 +419,18 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
     def __init__(self,*args): 
         self._mhash=None
         self.is_tensor=True
+
+    def get_name(self):
+        #solo para ordenar la suma 
+        name = None
+        args = self.get_args_tensors()
+        for arg in args: 
+            if name == None:
+                name = arg.get_name()
+            else: 
+                name += arg.get_name()
+        return name
+             
 
     #def __repr__(self):
     #    s = [self._separate_exp(a) for a in self.args]
@@ -493,24 +500,28 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         return str_ind if names else tuple(inds)
 
 
-class PlusTensors(Tensor, Associative, Commutative, Identity, Cummulative):
+class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
+                    Cummulative):
 
     def __new__(cls, *args):
+        if len(args) <= 1 :
+            return 0 if len(args)==0 else args[0]
         instance = super(PlusTensors, cls).__new__(cls)
         instance._identity_ = 0
         instance.args = args
-        instance.make_associative_tensors()
+        print(args)
+        instance.make_associative()
         instance.ignore_identity()
         if len(instance.args)==0: 
             return 0
         if len(instance.args) == 1:
             return instance.args[0]
         instance.valid_index_structure(plustensors=True)
+        instance.make_commutative(plustensors=True)
         instance.args=instance.simplify(MultTensors,instance._scalar_version,
-                                        instance._separate_scal,instance.args)
-        instance.make_commutative()
-        if len(instance.args) == 1:
-            return instance.args[0]
+                                        instance._separate_scal,instance.args,
+                                        sumTens=True)
+        
         if all([is_number(a) for a in instance.args]):
             return sum(args)
         else:
@@ -526,8 +537,8 @@ class PlusTensors(Tensor, Associative, Commutative, Identity, Cummulative):
         if isinstance(term, MultTensors):
             scalars = term.get_args_Scalars()
             if  len(scalars)>0:
-                scal = Plus(*term.args[:len(scalars)])
-                tens = MultTensors(*term.args[1:])
+                scal = MultTensors(*term.args[:len(scalars)])
+                tens = MultTensors(*term.args[len(scalars):])
                 return scal, tens
             else: 
                 return 1, term
@@ -540,5 +551,7 @@ class PlusTensors(Tensor, Associative, Commutative, Identity, Cummulative):
      
     def _scalar_version(self, *args):
         return Plus(*args)
+
+    
 
             

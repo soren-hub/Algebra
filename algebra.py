@@ -120,32 +120,32 @@ def _distribute_terms(terms):
     
 class Associative():   
     
-    def make_associative_tensors(self): 
-        from tensors import PlusTensors, MultTensors, Tensor
-        new_args = []
-        for a in self.args:
-            if isinstance(self,PlusTensors) == type(a):
-                new_args.extend(a.args)
-            elif isinstance(self,MultTensors)==type(a):
-                new_args.extend(a.args)
-            else:
-                new_args.append(a)
-        self.args = tuple(new_args)
-    
-    def make_associative(self):    
+
+    def make_associative(self):
+        from tensors import Tensor,PlusTensors, MultTensors    
         new_args = []
         for a in self.args:
             if type(a) == type(self):
                 new_args.extend(a.args)
+            elif isinstance(self,MultTensors) or isinstance(self,PlusTensors):
+                if isinstance(a,Tensor):
+                    new_args.append(a)
+                elif isinstance(a,MultTensors) or  isinstance(self,PlusTensors):
+                    new_args.extend(a.args)
+                else: 
+                    new_args.append(a) 
             else:
                 new_args.append(a)
         self.args = tuple(new_args)
         
 class Commutative():  
 
-   def make_commutative(self,tensors=False):
+
+    def make_commutative(self,tensors=False,plustensors=False):
         constlist = list(filter(is_number, self.args))
-        if not tensors:
+        if plustensors:
+            arglist = sorted(self.args, key=lambda x:x.get_name())
+        elif not tensors:
             arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
         else: 
             Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
@@ -154,11 +154,11 @@ class Commutative():
             Scallist.extend(scallist)
             Scallist.extend(tenslist)
             arglist = Scallist
-
+        
         if len(constlist) > 0:
             number = self._number_version(*constlist)
             arglist.insert(0,number) 
-        self.args = tuple(arglist)
+        self.args=  tuple(arglist)
 
 class Identity():
     
@@ -195,14 +195,18 @@ class Cummulative():
         
     
    
-    def simplify(self, repeated, operate, separate,args):
+    def simplify(self, repeated, operate, separate, args, sumTens=False):
         previous = None
         c = None
         terms = []
-        def key(term):
-            ci, t  = separate(term)
-            return hash(t)
-        args = sorted(args, key=key)
+        if sumTens:
+            args =sorted(self.args, key=lambda x:x.get_name())
+        else:
+            def key(term):
+                ci, t  = separate(term)
+                return hash(t)
+            args = sorted(args, key=key)
+        print(args,type(self),self.args,"args")
         for term in args:
             ci, current = separate(term)
             if current != previous:
@@ -211,6 +215,7 @@ class Cummulative():
                 c = ci
                 previous = current
             else:
+                print(c,ci,operate(c, ci),term,"info")
                 c = operate(c, ci)
         terms.append(repeated(previous, c))
         return tuple(terms)
@@ -246,7 +251,8 @@ class Expr:
         return -1*self
     
     def __add__(self, other):
-
+        print(type(self),type(other))
+        from tensors import _check_tensor, PlusTensors
         if other == 0:
             return self
         
@@ -255,11 +261,16 @@ class Expr:
         
         elif isinstance(self,Serie) or isinstance(other,Serie):        
             return PlusSeries(self,other)
+
+        elif _check_tensor(self) :        
+            return PlusTensors(*self.args,other)
+
             
         else:
             raise TypeError("unsupported operand type(s) for +: " +\
                                 type(self).__name__ + ' and ' +\
                                     type(other).__name__)
+
     def __radd__(self, other):
         return  self + other 
     
@@ -279,11 +290,15 @@ class Expr:
         return other**self
     
     def __mul__(self, other):
+        from tensors import _check_tensor, MultTensors
         if is_scalar(self) and is_scalar(other):
             return Mult(self, other)
         
         elif isinstance(self,Serie) or isinstance(other,Serie) :
             return MultSeries(self,other)
+        
+        elif _check_tensor(self) or _check_tensor(other):        
+            return MultTensors(*self.args,other)
 
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
@@ -471,6 +486,8 @@ class Mult(Expr, Associative, Commutative, Identity, Cummulative,
               NullElement):
     
     def __new__(cls, *args):
+        if len(args) <= 1 :
+            return 0 if len(args)==0 else args[0]
         if not all(map(is_scalar, args)):
             raise TypeError('ScalMul should only involve Scalar objects.')
         instance = super(Mult, cls).__new__(cls)
@@ -609,6 +626,8 @@ class Mult(Expr, Associative, Commutative, Identity, Cummulative,
 class Plus(Expr, Associative, Commutative, Identity, Cummulative):
     
     def __new__(cls, *args):
+        if len(args) <= 1 :
+            return 0 if len(args)==0 else args[0]
         if not all(map(is_scalar, args)):
             raise TypeError('Plus should only involve Scalar objects.')
         instance = super(Plus, cls).__new__(cls)
@@ -616,19 +635,16 @@ class Plus(Expr, Associative, Commutative, Identity, Cummulative):
         instance.args = args
         instance.make_associative()
         instance.ignore_identity()
-        if len(instance.args)==0: 
-            return 0
         instance.args = instance.simplify(Mult,instance._number_version,
                                         instance._separate_num,instance.args)
         instance.make_commutative()
-        if len(instance.args) == 1:
-            return instance.args[0]
         if all([is_number(a) for a in instance.args]):
             return sum(args)
         else:
             return instance
     
     def __init__(self, *args):
+        print(self.args)
         self.scalar = True
         self._mhash = None 
 
