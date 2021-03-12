@@ -306,8 +306,21 @@ class Tensor(Expr,Contraction):
     def get_name(self):
         return self.name
     
-    def __mul__(self, other):    
-        if isinstance(self,Tensor) or isinstance(other,Tensor):
+    def __mul__(self, other):  
+ 
+        if isinstance(self,MultTensors) or isinstance(self,Mult): 
+            if isinstance(other,MultTensors) or isinstance(other,Mult): 
+                return MultTensors(*self.args,*other.args) 
+            else:
+                return MultTensors(*self.args,other)
+
+        elif isinstance(other,MultTensors) or isinstance(other,Mult):
+            if isinstance(self,MultTensors) or isinstance(self,Mult): 
+                return MultTensors(*self.args,*other.args) 
+            else:
+                return MultTensors(self,*other.args)
+
+        elif isinstance(self,Tensor) or isinstance(other,Tensor):
             return MultTensors(self,other)
         #elif is_number(other):
         #    return MultTensors(*self.args,other)   
@@ -330,16 +343,16 @@ class Tensor(Expr,Contraction):
             if _check_tensor(other) and is_scalar(other):
                 return PlusTensors(self, other)
             else:
-                raise TypeError("unsupported operand type(s) for *: " +\
-                                    type(self).__name__ + ' and ' +\
+                raise TypeError("unsupported operand type(s) for *: "+\
+                                    type(self).__name__ + ' and '+\
                                         type(other).__name__)  
-
-        
-        elif _check_tensor(other):
-            if isinstance(self,PlusTensors) :
-                return PlusTensors(*self.args, other)
-            else: 
-                return PlusTensors(self, other) 
+#
+        #
+        #elif _check_tensor(other):
+        #    if isinstance(self,PlusTensors) :
+        #        return PlusTensors(*self.args, other)
+        #    else: 
+        #        return PlusTensors(self, other) 
 
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
@@ -406,7 +419,7 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         instance._identity_ = 1
         instance._null_ = 0
         instance.args  = args
-        instance.make_associative()
+        instance.make_associative_tensors()
         if instance.is_null():
             return 0
         instance.contraction(mult_tensor=True)    
@@ -509,8 +522,8 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         instance = super(PlusTensors, cls).__new__(cls)
         instance._identity_ = 0
         instance.args = args
-        print(args)
-        instance.make_associative()
+        
+        instance.make_associative_tensors()
         instance.ignore_identity()
         if len(instance.args)==0: 
             return 0

@@ -119,21 +119,24 @@ def _distribute_terms(terms):
 
     
 class Associative():   
+
+    def make_associative_tensors(self): 
+        from tensors import Tensor,PlusTensors, MultTensors
+        new_args = []
+        for a in self.args:    
+            if type(a) == type(self):
+                new_args.extend(a.args)  
+            elif isinstance(a,Mult) and isinstance(self,MultTensors):
+                new_args.append(a.args)
+            else:
+                new_args.append(a)
     
 
     def make_associative(self):
-        from tensors import Tensor,PlusTensors, MultTensors    
         new_args = []
         for a in self.args:
             if type(a) == type(self):
                 new_args.extend(a.args)
-            elif isinstance(self,MultTensors) or isinstance(self,PlusTensors):
-                if isinstance(a,Tensor):
-                    new_args.append(a)
-                elif isinstance(a,MultTensors) or  isinstance(self,PlusTensors):
-                    new_args.extend(a.args)
-                else: 
-                    new_args.append(a) 
             else:
                 new_args.append(a)
         self.args = tuple(new_args)
@@ -188,7 +191,8 @@ class Cummulative():
             ci, t  = separate(term)
             return hash(t)
         argstot = sorted((argsscal + argsScal), key=key)
-        scalterms = list(self.simplify(repeated, operate, separate,argstot))
+        print(argstot)
+        scalterms = list(self.simplify(repeated, operate, separate, argstot))
         scalterms.extend(terms)
         return tuple(scalterms)
 
@@ -206,7 +210,7 @@ class Cummulative():
                 ci, t  = separate(term)
                 return hash(t)
             args = sorted(args, key=key)
-        print(args,type(self),self.args,"args")
+        #print(args,type(self),self.args,"args")
         for term in args:
             ci, current = separate(term)
             if current != previous:
@@ -215,7 +219,7 @@ class Cummulative():
                 c = ci
                 previous = current
             else:
-                print(c,ci,operate(c, ci),term,"info")
+                #print(c,ci,operate(c, ci),term,"info")
                 c = operate(c, ci)
         terms.append(repeated(previous, c))
         return tuple(terms)
@@ -251,7 +255,7 @@ class Expr:
         return -1*self
     
     def __add__(self, other):
-        print(type(self),type(other))
+        #print(type(self),type(other))
         from tensors import _check_tensor, PlusTensors
         if other == 0:
             return self
@@ -262,8 +266,8 @@ class Expr:
         elif isinstance(self,Serie) or isinstance(other,Serie):        
             return PlusSeries(self,other)
 
-        elif _check_tensor(self) :        
-            return PlusTensors(*self.args,other)
+        #elif _check_tensor(self) :        
+        #    return PlusTensors(*self.args,other)
 
             
         else:
@@ -297,8 +301,8 @@ class Expr:
         elif isinstance(self,Serie) or isinstance(other,Serie) :
             return MultSeries(self,other)
         
-        elif _check_tensor(self) or _check_tensor(other):        
-            return MultTensors(*self.args,other)
+        #elif _check_tensor(self) or _check_tensor(other):        
+        #    return MultTensors(*self.args,other)
 
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
@@ -644,7 +648,7 @@ class Plus(Expr, Associative, Commutative, Identity, Cummulative):
             return instance
     
     def __init__(self, *args):
-        print(self.args)
+        #print(self.args)
         self.scalar = True
         self._mhash = None 
 
