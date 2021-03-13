@@ -85,21 +85,19 @@ def is_scalar(expr):
         else:
             return False
         
-def expand(exp):
-    try:
-        return exp.expanded()
-    except AttributeError:
-        return exp
-
-    
 def derived(exp,coordinate):
     try:
         return exp.derived(coordinate)
     except AttributeError:
         return 0
 
-    
-def _distribute_terms(terms):
+def expand(exp):
+    try:
+        return exp.expanded()
+    except AttributeError:
+        return exp
+
+def _distribute_terms(self,terms):
     """
     recibe una lista con los elementos de cada suma que haya en una expresion 
     y distribuye los elementos con todos los elementos 
@@ -155,7 +153,6 @@ class Commutative():
             Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
             scallist = sorted(self.get_args_tensors(scalars=True), key=hash)
             tenslist = sorted(self.get_args_tensors(others=True), key=hash)
-
             Scallist.extend(scallist)
             Scallist.extend(tenslist)
             arglist = Scallist
@@ -179,9 +176,6 @@ class NullElement():
     
     
 class Cummulative():
-    """
-    preguntar si se ve bien con la nueva funcion aux(tensors)
-    """
 
 
     def simplify_tens(self, repeated, operate, separate):
@@ -213,7 +207,6 @@ class Cummulative():
                 ci, t  = separate(term)
                 return hash(t)
             args = sorted(args, key=key)
-
         for term in args:
             ci, current = separate(term)
             if current != previous:
@@ -223,9 +216,7 @@ class Cummulative():
                 previous = current
             else:
                 c = operate(c, ci)
-
         terms.append(repeated(previous, c))
-
         return tuple(terms)
     
     
@@ -473,6 +464,9 @@ class ScalPow(Expr):
         return sp.Pow(sympy(self.base), sympy(self.exp))
     
     def expanded(self): 
+        """
+        mult
+        """
         terms = self.base.args
         if isinstance(self.base,Mult):
             new_args=list(map(lambda term :term**self.exp,terms))

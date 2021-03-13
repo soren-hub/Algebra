@@ -10,8 +10,8 @@ Created on Sun Mar 7 16:03:23 2021
 
 from algebra import Expr, Scalar, ScalPow, Mult, Plus
 from algebra import Associative,Commutative,Identity,Cummulative,NullElement
-from algebra import is_scalar, is_number,is_not_number, prod
-
+from algebra import is_scalar, is_number,is_not_number, prod, _distribute_terms
+from algebra import expand
 grekkletts = {"alpha", "beta", "gamma", "delta", "epsilon", "zeta","eta",
         "theta","iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "rho", 
         "sigma","tau", "upsilon", "phi", "chi", "psi", "omega", "digamma",
@@ -353,18 +353,15 @@ class Tensor(Expr,Contraction):
                                         type(other).__name__) 
 
         elif isinstance(self,PlusTensors) :
-
             if isinstance(other,PlusTensors):
                 return PlusTensors(*self.args, *other.args)
             else: 
                 return PlusTensors(*self.args, other) 
 
         elif isinstance(other,PlusTensors):
-
             return PlusTensors(self,*other.args)
 
         elif isinstance(self,Tensor) or isinstance(other,Tensor):
-
             return PlusTensors(self,other)
 
         else:
@@ -524,6 +521,20 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         str_ind= tuple(map(lambda x:x.get_name(),inds))
         return str_ind if names else tuple(inds)
 
+    def expanded(self):
+        terms = list(map(expand,self.args))
+        plus_terms = [f.args for f in terms if isinstance(f,PlusTensors)]
+        rest_terms = [f for f in terms if not isinstance(f,PlusTensors)]
+        left = MultTensors(*rest_terms)
+        if len(plus_terms)==0:
+            return left
+        expand_plus = _distribute_terms(plus_terms)
+        rigth = PlusTensors(*expand_plus)
+        new_args = list(map(lambda f: left*f,expand_plus)) 
+        return PlusTensors(*new_args)
+
+
+
 
 class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
                     Cummulative):
@@ -573,6 +584,8 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
     def _scalar_version(self, *args):
         return Plus(*args)
 
-    
+    def expanded(self):
+        terms = list(map(expand,self.args))
+        return Plus(*terms)
 
-            
+    
