@@ -307,7 +307,6 @@ class Tensor(Expr,Contraction):
         return self.name
     
     def __mul__(self, other):  
- 
         if isinstance(self,MultTensors) or isinstance(self,Mult): 
             if isinstance(other,MultTensors) or isinstance(other,Mult): 
                 return MultTensors(*self.args,*other.args) 
@@ -338,6 +337,7 @@ class Tensor(Expr,Contraction):
         return self * other
 
     def __add__(self, other):
+
         if other == 0:
             return self
 
@@ -350,17 +350,22 @@ class Tensor(Expr,Contraction):
             else:
                 raise TypeError("unsupported operand type(s) for *: "+\
                                     type(self).__name__ + ' and '+\
-                                        type(other).__name__)  
+                                        type(other).__name__) 
+
+        elif isinstance(self,PlusTensors) :
+
+            if isinstance(other,PlusTensors):
+                return PlusTensors(*self.args, *other.args)
+            else: 
+                return PlusTensors(*self.args, other) 
+
+        elif isinstance(other,PlusTensors):
+
+            return PlusTensors(self,*other.args)
 
         elif isinstance(self,Tensor) or isinstance(other,Tensor):
-            return MultTensors(self,other)
-#
-        #
-        #elif _check_tensor(other):
-        #    if isinstance(self,PlusTensors) :
-        #        return PlusTensors(*self.args, other)
-        #    else: 
-        #        return PlusTensors(self, other) 
+
+            return PlusTensors(self,other)
 
         else:
             raise TypeError("unsupported operand type(s) for *: " +\
@@ -430,12 +435,12 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         instance.make_associative_tensors()
         if instance.is_null():
             return 0
-        instance.contraction(mult_tensor=True)    
+        instance.contraction(mult_tensor=True)   
         instance.args = instance.simplify_tens(ScalPow, lambda a, b: a + b,
                                     instance._separate_exp)
         instance.ignore_identity()
         instance.make_commutative(tensors=True)
-        if len(instance.args)==1: return instance.args[0]
+        if len(instance.args)==1 : return instance.args[0]
         return instance
         
     def __init__(self,*args): 
@@ -461,7 +466,7 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
      
         for p, b in s:
     
-            if isinstance(b,PlusTensors): 
+            if isinstance(b,PlusTensors) or isinstance(b,Plus) : 
                 b_str = '(' + repr(b) + ')' 
             elif b == -1 :
                 b_str = "-" 
@@ -490,8 +495,6 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         else:
             return '(' + numer + '/(' + denom + '))' 
 
-    #def __repr__(self):
-    #    return '*'.join(str(arg) for arg in self.args)    
 
     def _separate_exp(self, term):
         return Mult._separate_exp(self, term )
@@ -542,17 +545,14 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         instance.args=instance.simplify(MultTensors,instance._scalar_version,
                                         instance._separate_scal,instance.args,
                                         sumTens=True)
-        
         if all([is_number(a) for a in instance.args]):
             return sum(args)
         else:
             return instance
 
-
     def __init__(self,*args):
         self._mhash = None 
         self.is_tensor = True
-
 
     def _separate_scal(self, term):
         if isinstance(term, MultTensors):

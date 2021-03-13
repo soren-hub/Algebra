@@ -123,13 +123,14 @@ class Associative():
     def make_associative_tensors(self): 
         from tensors import Tensor,PlusTensors, MultTensors
         new_args = []
-        for a in self.args:    
+        for a in self.args: 
             if type(a) == type(self):
                 new_args.extend(a.args)  
             elif isinstance(a,Mult) and isinstance(self,MultTensors):
-                new_args.append(a.args)
+                new_args.extend(a.args)
             else:
                 new_args.append(a)
+        self.args= tuple(new_args)
     
 
     def make_associative(self):
@@ -154,7 +155,7 @@ class Commutative():
             Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
             scallist = sorted(self.get_args_tensors(scalars=True), key=hash)
             tenslist = sorted(self.get_args_tensors(others=True), key=hash)
-            #print(Scallist,"A",scallist,"b",tenslist,"c")
+
             Scallist.extend(scallist)
             Scallist.extend(tenslist)
             arglist = Scallist
@@ -205,12 +206,14 @@ class Cummulative():
         c = None
         terms = []
         if sumTens:
+            from tensors import MultTensors
             args =sorted(self.args, key=lambda x:x.get_name())
         else:
             def key(term):
                 ci, t  = separate(term)
                 return hash(t)
             args = sorted(args, key=key)
+
         for term in args:
             ci, current = separate(term)
             if current != previous:
@@ -220,7 +223,9 @@ class Cummulative():
                 previous = current
             else:
                 c = operate(c, ci)
+
         terms.append(repeated(previous, c))
+
         return tuple(terms)
     
     
@@ -264,8 +269,8 @@ class Expr:
         elif isinstance(self,Serie) or isinstance(other,Serie):        
             return PlusSeries(self,other)
 
-        #elif _check_tensor(self) :        
-        #    return PlusTensors(*self.args,other)
+        elif _check_tensor(self) or _check_tensor(self):        
+            return PlusTensors(self,other)
 
             
         else:
@@ -292,9 +297,10 @@ class Expr:
         return other**self
     
     def __mul__(self, other):
+        
         from tensors import _check_tensor, MultTensors
 
-        if _check_tensor(self) or _check_tensor(other):        
+        if _check_tensor(self) or _check_tensor(other):   
             return MultTensors(self,other)
 
         elif is_scalar(self) and is_scalar(other):
