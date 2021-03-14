@@ -11,7 +11,7 @@ Created on Sun Mar 7 16:03:23 2021
 from algebra import Expr, Scalar, ScalPow, Mult, Plus
 from algebra import Associative,Commutative,Identity,Cummulative,NullElement
 from algebra import is_scalar, is_number,is_not_number, prod, _distribute_terms
-from algebra import expand
+from algebra import expand, derived
 grekkletts = {"alpha", "beta", "gamma", "delta", "epsilon", "zeta","eta",
         "theta","iota", "kappa", "lambda", "mu", "nu", "xi", "pi", "rho", 
         "sigma","tau", "upsilon", "phi", "chi", "psi", "omega", "digamma",
@@ -22,8 +22,12 @@ latinletts={"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l",
            "m","n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"}
 
 
-def indexs(names):
-    return tuple(Index(name[0],name[1]) for name in names)
+def indexs(names,listvar=[]):
+    if len(listvar)!=0: 
+        for i in range(len(listvar)): 
+            listvar[i]= Index(names[i][0],names[i][1])
+    else:
+        return tuple(Index(name[0],name[1]) for name in names)
 
 
         
@@ -117,10 +121,16 @@ def _check_tensor(expr):
     except AttributeError :
         return False   
 
+
 class ValidStructure:
 
     def letters_used(self):
-        if isinstance(self,MultTensors):
+        if isinstance(self,DerivTensors): 
+            letters_base = self.base.letters_used()
+            letters_ind = list(self.get_indices(deriv=True,names=True))
+            return list(letters_base) + letters_ind
+
+        elif isinstance(self,MultTensors):
             Scal_terms = self.get_args_Scalars(notNum=True)
             tens_terms = self.get_args_tensors()
             letters_base = set(map(lambda x:x.get_name().lower(),tens_terms))
@@ -140,15 +150,16 @@ class ValidStructure:
 
     def valid_index_structure(self,plustensors=False):
         if plustensors: 
-            aux = None
-            for f in self.args:
-                notFree = f.not_free_index()
-                inds=list(sorted(notFree,key=lambda x:x.get_name()))
-                if aux==None:
-                    aux=inds
-                elif aux !=inds :
-                    raise TypeError('Trying to add tensors with different'+\
-                                                    'index structure.')
+            if not all(map(is_scalar,self.args)): 
+                aux = None
+                for f in self.args:
+                    notFree = f.not_free_index()
+                    inds=list(sorted(notFree,key=lambda x:x.get_name()))
+                    if aux==None:
+                        aux=inds
+                    elif aux !=inds :
+                        raise TypeError('Trying to add tensors with different'+\
+                                                        'index structure.')
         else:
             if max(self.histogram_letters().values()) > 3:
                 raise TypeError('Tensors with invalid index structure.')
@@ -239,20 +250,33 @@ class Contraction(ValidStructure):
                     i += 1
         ordered.sort(key=lambda tup: tup[1])
         new_inds = tuple(f[0] for f in ordered)
-        if not mult_tensor :
+        if not mult_tensor:
             self.indices= new_inds
-        else:  
-            new_args = list(self.get_args_Scalars())
-            old_tens = self.get_args_tensors()
+        else :  
+            if isinstance(self,MultTensors):
+                new_args = list(self.get_args_Scalars())
+                old_tens = self.get_args_tensors()
+            elif isinstance(self,DerivTensors):
+                if isinstance(self.base,MultTensors):
+                    new_args = list(self.base.get_args_Scalars())
+                    old_tens = self.base.get_args_tensors()
+                else: 
+                    new_args = []
+                    old_tens = [self.base]
             aux = 0
-            for term in old_tens: 
-                if isinstance(term,Tensor): 
-                    name = term.get_name()
-                    quantity_inds = len(term.get_indices()) + aux 
-                    inds = new_inds[aux:quantity_inds]
-                    new_args.append(Tensor(name,*inds)) 
-                    aux = quantity_inds
-            self.args = new_args
+            for term in old_tens:
+                name = term.get_name()
+                quantity_inds = len(term.get_indices()) + aux 
+                inds = new_inds[aux:quantity_inds]
+                new_args.append(Tensor(name,*inds)) 
+                aux = quantity_inds
+            if isinstance(self,MultTensors):
+                self.args = new_args
+            elif isinstance(self,DerivTensors):
+                self.base = MultTensors(*new_args)
+                inds_base = len(self.base.get_indices())
+                self.indices = new_inds[inds_base:]
+
         self.valid_index_structure()
         
 
@@ -384,21 +408,21 @@ class Tensor(Expr,Contraction):
     def __rpow__(self,other): 
         return other**self
     
-    # def __truediv__(self, other):
-    #    if is_scalar(self) and is_scalar(other):
-    #        return Mult(ScalPow(other, -1), self)
-    #    else:
-    #        raise TypeError("unsupported operand type(s) for *: " +\
-    #                            type(self).__name__ + ' and ' +\
-    #                                type(other).__name__)
-    #        
-    # def __rtruediv__(self, other):
-    #    if is_scalar(self) and is_scalar(other):
-    #        return Mult(ScalPow(self, -1), other)
-    #    else:
-    #        raise TypeError("unsupported operand type(s) for *: " +\
-    #                            type(self).__name__ + ' and ' +\
-    #                                type(other).__name__)
+    def __truediv__(self, other):
+       if is_scalar(self) and is_scalar(other):
+           return MultTensor(ScalPow(other, -1), self)
+       else:
+           raise TypeError("unsupported operand type(s) for *: " +\
+                               type(self).__name__ + ' and ' +\
+                                   type(other).__name__)
+           
+    def __rtruediv__(self, other):
+       if is_scalar(self) and is_scalar(other):
+           return MultTensor(ScalPow(self, -1), other)
+       else:
+           raise TypeError("unsupported operand type(s) for *: " +\
+                               type(self).__name__ + ' and ' +\
+                                   type(other).__name__)
             
 
 
@@ -443,6 +467,7 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
     def __init__(self,*args): 
         self._mhash=None
         self.is_tensor=True
+        self.scalar = self.is_scalar()
 
     def get_name(self):
         #solo para ordenar la suma 
@@ -499,6 +524,9 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
     def _number_version(self, *args):
         return prod(args)
 
+    def is_scalar(self): 
+        return Tensor.is_scalar(self)
+
     def get_args_Scalars(self,notNum=False):
         args = [f for f in self.args if is_scalar(f) and not _check_tensor(f)]
         notNum_arg = tuple(filter(is_not_number, args))
@@ -532,6 +560,8 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         rigth = PlusTensors(*expand_plus)
         new_args = list(map(lambda f: left*f,expand_plus)) 
         return PlusTensors(*new_args)
+    
+
 
 
 
@@ -555,7 +585,7 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         instance.make_commutative(plustensors=True)
         instance.args=instance.simplify(MultTensors,instance._scalar_version,
                                         instance._separate_scal,instance.args,
-                                        sumTens=True)
+                                        sumTens=True)                                      
         if all([is_number(a) for a in instance.args]):
             return sum(args)
         else:
@@ -583,9 +613,89 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
      
     def _scalar_version(self, *args):
         return Plus(*args)
+    
+    def get_args_Scalars(self,notNum=False):
+        return MultTensors.get_args_Scalars(self,notNum)
+        
+    def get_args_tensors(self,scalars=False,others=False):
+        return MultTensors.get_args_Scalars(self,scalars,others)
 
     def expanded(self):
         terms = list(map(expand,self.args))
-        return Plus(*terms)
+        return PlusTensors(*terms)
 
+#class Metric(Tensor): 
+
+
+
+class DerivTensors(Tensor): 
+    
+    #ver que hacer con base= mult
+    
+    def __new__(cls,base,*indices, coordinate = []):
+        if not _check_tensor(base):
+            raise TypeError('DerivTensors should only involve'+\
+                                                         'Tensors objects.')
+        instance = super(DerivTensors, cls).__new__(cls)
+        instance.base=base
+        instance.indices = indices
+        instance.coordinate = coordinate
+        if is_number(instance.base):
+            return 0
+        if isinstance(instance.base,DerivTensors): 
+            instance.indices= instance.indices + instance.base.indices
+            instance.base=instance.base.base
+            return instance
+        elif isinstance(instance.base,PlusTensors):
+            return  instance.expanded()
+        return instance
+
+    def __init__(self,base,*indices, coordinate = []):
+        self.contraction(mult_tensor=True)
+        self.args=(self.base,self.not_free_index())
+        self._mhash = None
+        self.is_tensor = True 
+    
+    def get_indices(self,deriv=False,names=False):
+        inds_deriv = list(self.indices)
+        if isinstance(self.base,PlusTensors): 
+            inds_base = []
+        else:
+            inds_base= list(self.base.get_indices())
+        all_ind = tuple(inds_base + inds_deriv)
+        decision= all_ind if not deriv else tuple(inds_deriv)
+        str_ind = tuple(map(lambda x:x.get_name(),decision))
+        return decision if not names else str_ind
+
+
+    def __repr__(self): 
+        b_str = str(self.base)
+        coo_str = repr(self.coordinate)
+        ind = self.indices if len(self.indices)>1 else self.indices[0]
+        inds_str = str(ind) 
+        return "∂(" + b_str + ',' + inds_str +")" 
+
+    def get_name(self):
+        inds_str=self.get_indices(deriv=True)
+        base_str=self.base.get_name()
+        deriv_str= "∂"+ ','.join(repr(f) for f in inds_str)
+        return deriv_str + "("+ base_str +")"
+    
+    def expanded(self):
+        if isinstance(self.base,MultTensors):
+            new_terms=[]
+            terms = [f for f in self.base.args]
+            for i in range(len(terms)): 
+                new_element = [e for e in terms]
+                inds=self.get_indices(deriv=True)
+                new_element[i] = DerivTensors(new_element[i],*inds)
+                new_terms.append(MultTensors(*new_element))
+            return PlusTensors(*new_terms)
+        elif isinstance(self.base,PlusTensors):
+            terms = self.base.expanded().args
+            inds = self.get_indices(deriv=True)
+            new_terms = list(map(lambda x:DerivTensors(x,*inds),terms))
+            return PlusTensors(*new_terms)
+        else:
+            return self 
     

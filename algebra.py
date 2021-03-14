@@ -145,9 +145,11 @@ class Commutative():
 
     def make_commutative(self,tensors=False,plustensors=False):
         constlist = list(filter(is_number, self.args))
-        if plustensors:
-            arglist = sorted(self.args, key=lambda x:x.get_name())
-        elif not tensors:
+        #if plustensors:
+        #    
+        #    args=list(filter(is_not_number, self.args))
+        #    arglist = sorted(args, key=lambda x:x.get_name())
+        if not tensors:
             arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
         else: 
             Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
@@ -158,15 +160,19 @@ class Commutative():
             arglist = Scallist
         
         if len(constlist) > 0:
-            number = self._number_version(*constlist)
+            if plustensors:
+                number = self._scalar_version(*constlist)
+            else:
+                number = self._number_version(*constlist) 
             arglist.insert(0,number) 
-
         self.args=  tuple(arglist)
 
 class Identity():
     
     def ignore_identity(self):
-        self.args = tuple(filter(self._identity_.__ne__, self.args))
+        args = tuple(filter(self._identity_.__ne__, self.args))
+        self.args = args if len(args)>0 else [1]
+        
     
 
 class NullElement():
@@ -200,8 +206,14 @@ class Cummulative():
         c = None
         terms = []
         if sumTens:
-            from tensors import MultTensors
-            args =sorted(self.args, key=lambda x:x.get_name())
+            from tensors import MultTensors, _check_tensor
+            if all(map(_check_tensor,self.args)):
+                args = sorted(self.args, key=lambda x:x.get_name())
+            else:
+                def key(term):
+                    ci, t  = separate(term)
+                    return hash(t)
+                args = sorted(self.args, key=key)
         else:
             def key(term):
                 ci, t  = separate(term)
@@ -388,7 +400,7 @@ class ScalPow(Expr):
         instance.args = args
         if len(instance.args) > 2:
             raise TypeError('ScalPow takes 2 arguments but ' + \
-                            len(instance.args)  + ' were given.')
+                            str(len(instance.args)) + ' were given.')
             
         elif len(instance.args) == 1:
             return instance.args[0]
@@ -438,14 +450,14 @@ class ScalPow(Expr):
             base_string = str(self.base)
         else:
             base_string = self.base.latex()
-            if isinstance(self.base, Mult) or isinstance(self.base, Plus)   : 
+            if isinstance(self.base, Mult) or isinstance(self.base, Plus): 
                 base_string = '(' + base_string + ')'
         
         if is_number(self.exp) and self.exp < 0   :
             exp_string = str(-self.exp)
             return '\\frac{1}{' + base_string + '^' + exp_string + '}'
         else:
-            exp_string = repr(self.exp) if is_number(self.exp) else self.exp.latex()
+            exp_string=repr(self.exp) if is_number(self.exp) else self.exp.latex()
             if len(exp_string) > 1:
                 exp_string = '{' + exp_string +'}'
             return base_string + '^' + exp_string
@@ -649,6 +661,10 @@ class Plus(Expr, Associative, Commutative, Identity, Cummulative):
         instance.args = args
         instance.make_associative()
         instance.ignore_identity()
+        if len(instance.args)==0: 
+            return 0
+        elif len(instance.args) == 1:
+            return instance.args[0]
         instance.args = instance.simplify(Mult,instance._number_version,
                                         instance._separate_num,instance.args)
         instance.make_commutative()
@@ -706,7 +722,7 @@ class Deriv(Expr):
         instance.base = base
         instance.coordinate = coordinate 
         if isinstance(instance.base,Deriv):
-            intance.base = instance.base.base
+            instance.base = instance.base.base
             new_coo = instance.coordinate + instance.base.coordinate
             instance.coordinate = new_coo
         return instance     
@@ -716,11 +732,11 @@ class Deriv(Expr):
         
     def __repr__(self):
         return "∂(" + repr(self.base) +\
-                            ',' +' '.join(repr(f) for f in self.coordinate)  + ')'
+                            ',' +' '.join(repr(f) for f in self.coordinate)+')'
     
     def latex(self):
-        return '\partial_{' + ' '.join(f.latex() for f in self.coordinate)+'}' +\
-                                                    '(' + self.base.latex() +')'
+        return '\partial_{' + ' '.join(f.latex() for f in self.coordinate)+'}'+\
+                                                    '(' + self.base.latex()+')'
     def expanded(self): 
         aux  =None
         base = self.base.expanded()
@@ -798,11 +814,13 @@ def _variables(exp):
         if isinstance(base,Scalar): 
             terms.append(base)
         else:
-            var=[_variables(f)[0] for f in base.args if isinstance(_variables(f),list)  ] 
+            condition = lambda f: isinstance(_variables(f),list)
+            var=[_variables(f)[0] for f in base.args if condition(f) ] 
             terms.extend(var)
  
     elif isinstance(exp,Mult) or isinstance(exp,Plus) :
-        var=[_variables(f)[0] for f in exp.args if isinstance(_variables(f),list) ] 
+        condition = lambda f: isinstance(_variables(f),list)
+        var=[_variables(f)[0] for f in exp.args if condition(f) ] 
         terms.extend(var)
         
     termsf =list(filter(None.__ne__, terms))
@@ -811,11 +829,12 @@ def _variables(exp):
 
 class Serie(Expr):
     
-    def __init__(self,args=[],coordinate=None, order = None, for_tensor = False ): 
+    def __init__(self,args=[],coordinate=None,order =None,for_tensor =False): 
         if coordinate == None:
             coo = self.search_dependency(args)
             if len(coo)>1:
-                raise ValueError("For multivalued Series you must specify the expansion coordinate.") 
+                raise ValueError('For multivalued Series you must specify'+\
+                                                'the expansion coordinate.') 
             self.coordinate = list(coo)[0]
         else:
             self.coordinate= coordinate 
@@ -923,13 +942,15 @@ class PlusSeries(Serie):
             return self.simple_distribute(args)
         series.sort(key= lambda Serie: Serie.order)
         smallest = series[0]
-        term_pos = [Plus(*(f.args[i] for f in args)) for i in smallest.args.keys()] 
+        term_pos = [Plus(*(f.args[i] for f in args))
+                                                for i in smallest.args.keys()] 
         return term_pos
     
     def simple_distribute(self,args): 
         scalar = [f for f in args if not isinstance(f,Serie)][0]
         serie_args = [f for f in args if  isinstance(f,Serie)][0].args
-        new_serie = [serie_args[i] if i!=0 else serie_args[i]+scalar for i in serie_args  ] 
+        new_serie = [serie_args[i] if i!=0 else serie_args[i]+scalar 
+                                                        for i in serie_args] 
         return new_serie
 
         
@@ -961,7 +982,7 @@ class MultSeries(Serie):
                 if i+j < series[0].order:
                     try: 
                         aux = new_args[j+i]
-                        new_args[j+i] = series[0].args[j] * series[1].args[i] + aux
+                        new_args[j+i]=series[0].args[j]*series[1].args[i]+aux
                     except KeyError: 
                         new_args[j+i] = series[0].args[j] * series[1].args[i]   
         new_args=[f for f in new_args.values()]
