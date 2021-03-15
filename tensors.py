@@ -8,7 +8,8 @@ Created on Sun Mar 7 16:03:23 2021
 
 
 
-from algebra import Expr, Scalar, ScalPow, Mult, Plus
+from algebra import Expr, Scalar, ScalPow, Mult, Plus , Serie, MultSeries
+from algebra import PlusSeries
 from algebra import Associative,Commutative,Identity,Cummulative,NullElement
 from algebra import is_scalar, is_number,is_not_number, prod, _distribute_terms
 from algebra import expand, derived
@@ -274,13 +275,19 @@ class Contraction(ValidStructure):
         aux = 0
         for term in old_tens:
             if isinstance(term,DerivTensors): 
-                if isinstance(term.base,Tensor): 
-                    b=term.base
+                b=term.base
+                if isinstance(term.base,Metric):
+                    tensor,len_ind=self._new_tensor(b,new_inds,aux,metric=True)
+                elif isinstance(term.base,Tensor): 
                     tensor,len_ind =self._new_tensor(b,new_inds,aux)
-                    len_inds_deriv=len(term.get_indices(deriv=True))+len_ind
-                    ind_deriv=new_inds[len_ind:len_inds_deriv]
-                    new_args.append(DerivTensors(tensor,*ind_deriv)) 
-                    aux =  len_inds_deriv 
+                len_inds_deriv=len(term.get_indices(deriv=True))+len_ind
+                ind_deriv=new_inds[len_ind:len_inds_deriv]
+                new_args.append(DerivTensors(tensor,*ind_deriv)) 
+                aux =  len_inds_deriv 
+            elif isinstance(term,Metric):
+                tensor,len_ind=self._new_tensor(term,new_inds,aux,metric=True)
+                new_args.append(tensor) 
+                aux = len_ind
             elif isinstance(term,Tensor):
                 tensor,len_ind=self._new_tensor(term,new_inds,aux)
                 new_args.append(tensor) 
@@ -293,11 +300,12 @@ class Contraction(ValidStructure):
             self.indices = new_inds[-quantity_inds_deriv:]
 
     
-    def _new_tensor(self,term,indices,aux):
+    def _new_tensor(self,term,indices,aux,metric=False):
         name = term.get_name() 
         quantity_inds = len(term.get_indices()) + aux 
         inds = indices[aux:quantity_inds]
-        return Tensor(name,*inds) , quantity_inds
+        condition =  Tensor(name,*inds) if not metric else Metric(name,*inds)
+        return condition , quantity_inds
         
 
 class Tensor(Expr,Contraction):
@@ -478,7 +486,6 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
             return 0
         funtion = lambda f:isinstance(f,PlusTensors) or isinstance(f,Plus)
         plus_terms=list(filter(funtion,instance.args))
-        print(instance.args,"mult")
         if len(plus_terms)==0: 
             instance.contraction(mult_tensor=True) 
         instance.args = instance.simplify_tens(ScalPow, lambda a, b: a + b,
@@ -593,6 +600,58 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         new_args = list(map(lambda f: left*f,expand_plus)) 
         return PlusTensors(*new_args)
     
+    def ignore_metric_contracted(self): 
+        Scalars=self.get_args_Scalars()
+        args=self.get_args_tensors()
+        pos=self.position_indices(notfree=True)
+        inds_pos=sorted(pos,key=lambda tup:tup[1])
+        metrics_indpos=dict()
+        other_indpos=dict()
+        aux=0
+        for term in args:                                                
+            if isinstance(term,Metric): 
+                inds = term.get_indices()
+                qua_ind= aux + len(inds)
+                metrics_indpos[term] = inds_pos[aux:qua_ind]
+                aux= qua_ind
+            elif isinstance(term,Tensor):
+                inds = term.get_indices()
+                qua_ind= aux + len(inds)
+                other_indpos[term] = inds_pos[aux:qua_ind]
+                aux= qua_ind
+            #falta plustensors:
+        if metrics_indpos==0:
+            return self 
+        if len(args)==2:
+            tensor = list(other_indpos.keys())[0]
+            return Tensor(tensor.get_name(),*self.not_free_index())
+        new_args= []
+        for t,inds_t in other_indpos.items(): 
+            if len(t.not_free_index())!=0: 
+                for m,inds_m in metrics_indpos.items(): 
+                    ind_m_contr = [(k,v) for k,v in inds_m 
+                                                if _check_contracted(k)]
+                    ind_t_contr=[(k,v) for k,v in inds_t 
+                                                    if _check_contracted(k)]
+                    if ind_m_contr in dict(ind_t_contr).keys(): 
+                        freeind_t = [f for f in inds_t 
+                                        if not _check_contracted(f[0])]
+                        diff_ind =[f for f in ind_t_contr 
+                                        if f[0]!= ind_m_contr]
+                        freeind_t.extend(diff_ind)
+                        freeind_m = [(k,v) for k,v in inds_m 
+                                            if not _check_contracted(k)]
+                        freeind_t.extend(freeind_m)
+                        freeind_t.sort(key=lambda tup:tup[1])
+                        name=t.get_name()
+                        new_indices=[k for k,v in freeind_t]
+                        tensor=Tensor(name,*new_indices)
+                        new_args.append(tensor)           
+            else:
+                new_args.append(t)
+
+        return MultTensors(*Scalars,*new_args)
+    
 
 
 
@@ -609,14 +668,12 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         instance.args = args
         instance.make_associative_tensors()
         instance.ignore_identity()
-
         if len(instance.args)==0: 
             return 0
         if len(instance.args) == 1:
             return instance.args[0]
         instance.valid_index_structure(plustensors=True)
         instance.make_commutative(plustensors=True)
-        print(instance.args)
         instance.args=instance.simplify(MultTensors,instance._scalar_version,
                                         instance._separate_scal,instance.args,
                                         sumTens=True)        
@@ -732,3 +789,42 @@ class DerivTensors(Tensor):
         else:
             return self 
     
+
+def invert_tensor(exp,order=None):
+    print(type(exp.args[1]))
+    background_metric=exp.args[0]
+    new_ind = []
+    inds = background_metric.get_indices()
+    for i in range(len(inds)):
+        if i!=0:
+            name = inds[i].get_name()
+            if inds[i].position==0:
+                new_ind.append(Index(name,1))
+            else:
+                new_ind.append(Index(name,0))
+        else: 
+            name = background_metric.letters_available().pop(0)
+            new_ind.append(Index(name,1))
+    invert_background_metric = Metric(background_metric.get_name(),*new_ind)
+    print(invert_background_metric,type(invert_background_metric))
+    unknown_tensor = Tensor("X",*new_ind)
+    terms=[invert_background_metric,unknown_tensor]
+
+    serie_aux = Serie(terms,for_tensor=True)
+    all_terms = MultSeries(serie_aux,exp,for_tensor=True)
+
+    return(all_terms)
+
+
+
+
+class Metric (Tensor):
+
+    def __init__(self,name,*indices):
+        self.name = name 
+        self.indices = indices
+        self.args = (self.name,self.not_free_index())
+        self.contraction()
+        self._mhash= None 
+        self.scalar = self.is_scalar()
+        self.is_tensor = True 

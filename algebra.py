@@ -145,10 +145,6 @@ class Commutative():
 
     def make_commutative(self,tensors=False,plustensors=False):
         constlist = list(filter(is_number, self.args))
-        #if plustensors:
-        #    
-        #    args=list(filter(is_not_number, self.args))
-        #    arglist = sorted(args, key=lambda x:x.get_name())
         if not tensors:
             arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
         else: 
@@ -509,6 +505,10 @@ class ScalPow(Expr):
         args=list(filter(is_not_number,self.args))
         return [f.letters_used() for f in args] 
     
+    def get_name(self):
+        return self.base.get_name()
+
+    
 
                 
 
@@ -848,19 +848,24 @@ def _variables(exp):
 
 class Serie(Expr):
     
-    def __init__(self,args=[],coordinate=None,order =None,for_tensor =False): 
-        if coordinate == None:
-            coo = self.search_dependency(args)
-            if len(coo)>1:
-                raise ValueError('For multivalued Series you must specify'+\
-                                                'the expansion coordinate.') 
-            self.coordinate = list(coo)[0]
+    def __init__(self,args=[],coordinate=None,order =None,for_tensor =False):
+        if not for_tensor: 
+            if coordinate == None :
+                coo = self.search_dependency(args)
+                if len(coo)>1:
+                    raise ValueError('For multivalued Series you must '+\
+                                        'specify the expansion coordinate.') 
+                self.coordinate = list(coo)[0]
+            else:
+                self.coordinate= coordinate 
+            expr = Plus(*args)
+            self.args = dict(get_order_by_variable(expr,self.coordinate))
         else:
-            self.coordinate= coordinate 
-        expr = Plus(*args) if not for_tensor else self#agregar cuando sera tensor 
-        self.args = dict(get_order_by_variable(expr,self.coordinate))
+            from tensors import PlusTensors
+            self.args = self.get_order_by_tensors(args)
         self.order = self.highest_order() + 1 if order == None  else order
         self._mhash = None
+        self.is_tensor = for_tensor
         
     def __repr__(self): 
         return  ' + '.join(repr(self.args[arg]) for arg in self.args) +\
@@ -879,8 +884,11 @@ class Serie(Expr):
         except KeyError :
             return 0
     
-    def make_plus(self): 
+    def make_plus(self,): 
         args = [self.args[arg] for arg in self.args]
+        if self.is_tensor:
+            from tensors import PlusTensors
+            return PlusTensors(*args)
         return Plus(*args)
     
     def derived(self):
@@ -890,7 +898,9 @@ class Serie(Expr):
     
     def highest_order(self): 
         return list(self.args.keys())[-1]
-    
+        
+    def get_order_by_tensors(self,args):
+        return {i:args[i] for i in range(len(args)) }
 
 
     
@@ -938,6 +948,8 @@ class SeriePow(Serie):
             return MultSeries(*all_args)
         else: 
             return self
+    
+
 
 
     
@@ -980,12 +992,16 @@ class PlusSeries(Serie):
         
 class MultSeries(Serie): 
     
-    def __new__(cls,*args):  
+    def __new__(cls,*args,for_tensor=False):  
         instance = super(MultSeries, cls).__new__(cls)
-        coordinate =  [f for f in args if isinstance(f,Serie)][0].coordinate
-        instance.args = instance.distribute(args)
-        expr=Plus()
-        return Serie(instance.args,coordinate)
+        if not for_tensor:
+            first= [f for f in args if isinstance(f,Serie)][0]
+            coordinate = first.coordinate
+            instance.args = instance.distribute(args)
+            return Serie(instance.args,coordinate)
+        else: 
+            instance.args = instance.distribute(args)
+            return Serie(instance.args,for_tensor=True)
     
     def __init__(self,*args): 
         self
