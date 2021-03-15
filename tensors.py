@@ -131,16 +131,19 @@ class ValidStructure:
             return list(letters_base) + letters_ind
 
         elif isinstance(self,MultTensors):
-            Scal_terms = self.get_args_Scalars(notNum=True)
-            tens_terms = self.get_args_tensors()
-            letters_base = set(map(lambda x:x.get_name().lower(),tens_terms))
+            Scal_terms = list(self.get_args_Scalars(notNum=True))
+            tens_terms = list(self.get_args_tensors())
+            base=[]
+            for term in Scal_terms+tens_terms: 
+                base.extend(term.letters_used())
+            letters_base= set(base)
             letters_ind = list(self.get_indices(names=True))
             return list(letters_base) + letters_ind
 
         elif isinstance(self,Tensor): 
             letters_ind=list(self.get_indices(names=True))
             return [self.name.lower()] + letters_ind
-
+        
     def histogram_letters(self): 
         list_strs = self.letters_used()
         d = dict()
@@ -253,31 +256,48 @@ class Contraction(ValidStructure):
         if not mult_tensor:
             self.indices= new_inds
         else :  
-            if isinstance(self,MultTensors):
-                new_args = list(self.get_args_Scalars())
-                old_tens = self.get_args_tensors()
-            elif isinstance(self,DerivTensors):
-                if isinstance(self.base,MultTensors):
-                    new_args = list(self.base.get_args_Scalars())
-                    old_tens = self.base.get_args_tensors()
-                else: 
-                    new_args = []
-                    old_tens = [self.base]
-            aux = 0
-            for term in old_tens:
-                name = term.get_name()
-                quantity_inds = len(term.get_indices()) + aux 
-                inds = new_inds[aux:quantity_inds]
-                new_args.append(Tensor(name,*inds)) 
-                aux = quantity_inds
-            if isinstance(self,MultTensors):
-                self.args = new_args
-            elif isinstance(self,DerivTensors):
-                self.base = MultTensors(*new_args)
-                inds_base = len(self.base.get_indices())
-                self.indices = new_inds[inds_base:]
-
+            self.contraction_mult(new_inds)
         self.valid_index_structure()
+
+
+    def contraction_mult(self,new_inds):
+        if isinstance(self,MultTensors):
+            new_args = list(self.get_args_Scalars())
+            old_tens = self.get_args_tensors()
+        elif isinstance(self,DerivTensors):
+            if isinstance(self.base,MultTensors):
+                new_args = list(self.base.get_args_Scalars())
+                old_tens = self.base.get_args_tensors()
+            else: 
+                new_args = []
+                old_tens = [self.base]
+        aux = 0
+        for term in old_tens:
+            if isinstance(term,DerivTensors): 
+                if isinstance(term.base,Tensor): 
+                    b=term.base
+                    tensor,len_ind =self._new_tensor(b,new_inds,aux)
+                    len_inds_deriv=len(term.get_indices(deriv=True))+len_ind
+                    ind_deriv=new_inds[len_ind:len_inds_deriv]
+                    new_args.append(DerivTensors(tensor,*ind_deriv)) 
+                    aux =  len_inds_deriv 
+            elif isinstance(term,Tensor):
+                tensor,len_ind=self._new_tensor(term,new_inds,aux)
+                new_args.append(tensor) 
+                aux = len_ind
+        if isinstance(self,MultTensors):
+            self.args = new_args
+        elif isinstance(self,DerivTensors):
+            self.base = MultTensors(*new_args)
+            quantity_inds_deriv = len(self.get_indices(deriv=True)) 
+            self.indices = new_inds[-quantity_inds_deriv:]
+
+    
+    def _new_tensor(self,term,indices,aux):
+        name = term.get_name() 
+        quantity_inds = len(term.get_indices()) + aux 
+        inds = indices[aux:quantity_inds]
+        return Tensor(name,*inds) , quantity_inds
         
 
 class Tensor(Expr,Contraction):
@@ -330,7 +350,7 @@ class Tensor(Expr,Contraction):
     def get_name(self):
         return self.name
     
-    def __mul__(self, other):  
+    def __mul__(self, other): 
         if isinstance(self,MultTensors) or isinstance(self,Mult): 
             if isinstance(other,MultTensors) or isinstance(other,Mult): 
                 return MultTensors(*self.args,*other.args) 
@@ -456,7 +476,11 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         instance.make_associative_tensors()
         if instance.is_null():
             return 0
-        instance.contraction(mult_tensor=True)   
+        funtion = lambda f:isinstance(f,PlusTensors) or isinstance(f,Plus)
+        plus_terms=list(filter(funtion,instance.args))
+        print(instance.args,"mult")
+        if len(plus_terms)==0: 
+            instance.contraction(mult_tensor=True) 
         instance.args = instance.simplify_tens(ScalPow, lambda a, b: a + b,
                                     instance._separate_exp)
         instance.ignore_identity()
@@ -525,7 +549,15 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         return prod(args)
 
     def is_scalar(self): 
-        return Tensor.is_scalar(self)
+        plus_terms=list(filter(lambda f:isinstance(f,PlusTensors),self.args))
+        if len(plus_terms)==0:
+            return Tensor.is_scalar(self)
+        else: 
+            not_plus=[f for f in self.args if not isinstance(f,PlusTensors)]
+            if all(map(is_scalar,not_plus)) and all(map(is_scalar,plus_terms)):
+                return True
+            else:
+                return False
 
     def get_args_Scalars(self,notNum=False):
         args = [f for f in self.args if is_scalar(f) and not _check_tensor(f)]
@@ -577,15 +609,17 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         instance.args = args
         instance.make_associative_tensors()
         instance.ignore_identity()
+
         if len(instance.args)==0: 
             return 0
         if len(instance.args) == 1:
             return instance.args[0]
         instance.valid_index_structure(plustensors=True)
         instance.make_commutative(plustensors=True)
+        print(instance.args)
         instance.args=instance.simplify(MultTensors,instance._scalar_version,
                                         instance._separate_scal,instance.args,
-                                        sumTens=True)                                      
+                                        sumTens=True)        
         if all([is_number(a) for a in instance.args]):
             return sum(args)
         else:
@@ -624,8 +658,6 @@ class PlusTensors(Expr,ValidStructure,Associative, Commutative, Identity,
         terms = list(map(expand,self.args))
         return PlusTensors(*terms)
 
-#class Metric(Tensor): 
-
 
 
 class DerivTensors(Tensor): 
@@ -647,31 +679,31 @@ class DerivTensors(Tensor):
             instance.base=instance.base.base
             return instance
         elif isinstance(instance.base,PlusTensors):
-            return  instance.expanded()
+            return  instance
+        instance.contraction(mult_tensor=True)
+        instance.args=(instance.base,instance.not_free_index())
         return instance
 
     def __init__(self,base,*indices, coordinate = []):
-        self.contraction(mult_tensor=True)
-        self.args=(self.base,self.not_free_index())
         self._mhash = None
         self.is_tensor = True 
     
     def get_indices(self,deriv=False,names=False):
         inds_deriv = list(self.indices)
-        if isinstance(self.base,PlusTensors): 
-            inds_base = []
-        else:
-            inds_base= list(self.base.get_indices())
+        inds_base= list(self.base.get_indices())
         all_ind = tuple(inds_base + inds_deriv)
         decision= all_ind if not deriv else tuple(inds_deriv)
         str_ind = tuple(map(lambda x:x.get_name(),decision))
         return decision if not names else str_ind
 
 
-    def __repr__(self): 
+    def __repr__(self):    
         b_str = str(self.base)
-        coo_str = repr(self.coordinate)
-        ind = self.indices if len(self.indices)>1 else self.indices[0]
+        if not isinstance(self.base,PlusTensors): 
+            inds=self.get_indices(deriv=True) 
+            ind = inds if len(inds)>1 else inds[0]
+        else: 
+            ind= self.indices   
         inds_str = str(ind) 
         return "∂(" + b_str + ',' + inds_str +")" 
 
@@ -693,8 +725,9 @@ class DerivTensors(Tensor):
             return PlusTensors(*new_terms)
         elif isinstance(self.base,PlusTensors):
             terms = self.base.expanded().args
-            inds = self.get_indices(deriv=True)
-            new_terms = list(map(lambda x:DerivTensors(x,*inds),terms))
+            inds = self.indices#get_indices(deriv=True)
+            funtion=lambda x:DerivTensors(x,*inds).expanded()
+            new_terms = list(map(funtion,terms))
             return PlusTensors(*new_terms)
         else:
             return self 

@@ -97,7 +97,7 @@ def expand(exp):
     except AttributeError:
         return exp
 
-def _distribute_terms(self,terms):
+def _distribute_terms(terms):
     """
     recibe una lista con los elementos de cada suma que haya en una expresion 
     y distribuye los elementos con todos los elementos 
@@ -272,7 +272,7 @@ class Expr:
         elif isinstance(self,Serie) or isinstance(other,Serie):        
             return PlusSeries(self,other)
 
-        elif _check_tensor(self) or _check_tensor(self):        
+        elif _check_tensor(self) or _check_tensor(self):     
             return PlusTensors(self,other)
 
             
@@ -335,7 +335,7 @@ class Expr:
             raise TypeError("unsupported operand type(s) for *: " +\
                                 type(self).__name__ + ' and ' +\
                                     type(other).__name__)
-            
+    
     
         
 
@@ -388,7 +388,9 @@ class Scalar(Expr):
             return 1
         else: 
             return 0
-        
+            
+    def letters_used(self):
+        return [self.name] 
 
 
 class ScalPow(Expr):
@@ -502,6 +504,10 @@ class ScalPow(Expr):
                 return 0
         else: 
             return derived(self.expanded(),coordinate)
+    
+    def letters_used(self):
+        args=list(filter(is_not_number,self.args))
+        return [f.letters_used() for f in args] 
     
 
                 
@@ -645,6 +651,10 @@ class Mult(Expr, Associative, Commutative, Identity, Cummulative,
             return Plus(*new_terms)
         else: 
             return 0
+    
+    def letters_used(self):
+        args=list(filter(is_not_number,self.args))
+        return [f.letters_used() for f in args] 
         
 
             
@@ -706,6 +716,10 @@ class Plus(Expr, Associative, Commutative, Identity, Cummulative):
         new_terms = list(map(lambda x:derived(x,coordinate),terms))
         return Plus(*new_terms)
     
+    def letters_used(self):
+        args=list(filter(is_not_number,self.args))
+        return [f.letters_used() for f in args] 
+    
 
     
 
@@ -728,7 +742,7 @@ class Deriv(Expr):
         return instance     
                 
     def __init__(self, base, coordinate = []):  
-        self.args=(base,coordinate)
+        self.args=(self.base,self.coordinate)
         
     def __repr__(self):
         return "∂(" + repr(self.base) +\
@@ -743,6 +757,11 @@ class Deriv(Expr):
         for coo in self.coordinate:
             aux = derived(base,coo) if aux == None else derived(aux,coo)     
         return aux
+    
+    def letters_used(self):
+        base =list(filter(is_not_number,self.base.args))
+        coo = [f.letters_used() for f in self.coordinate] 
+        return base+coo
 
     
     
