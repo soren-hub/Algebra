@@ -148,9 +148,17 @@ class Commutative():
         if not tensors:
             arglist = sorted(list(filter(is_not_number, self.args)), key=hash)
         else: 
+            from tensors import PlusTensors
             Scallist = sorted(self.get_args_Scalars(notNum=True), key=hash)
             scallist = sorted(self.get_args_tensors(scalars=True), key=hash)
             tenslist = sorted(self.get_args_tensors(others=True), key=hash)
+            plus_terms=list(filter(lambda t:isinstance(t,PlusTensors),tenslist))
+            if len(plus_terms)!=0:
+                #only for the expretion order 
+                condition =lambda t: not isinstance(t,PlusTensors)
+                terms = list(filter(condition,tenslist))
+                terms.extend(plus_terms)
+                tenslist=terms
             Scallist.extend(scallist)
             Scallist.extend(tenslist)
             arglist = Scallist
