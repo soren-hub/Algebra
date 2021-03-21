@@ -189,18 +189,20 @@ class Cummulative():
 
 
     def simplify_tens(self, repeated, operate, separate):
-        terms = list(self.get_args_tensors(others=True))
-        argsscal = list(self.get_args_tensors(scalars=True))
-        argsScal = list(self.get_args_Scalars())       
-        if len(argsscal)==0 and len(argsScal)==0:
-            return tuple(terms)
+        tens = list(self.get_args_tensors(others=True))
         def key(term):
             ci, t  = separate(term)
             return hash(t)
-        argstot = sorted((argsscal + argsScal), key=key)
-        scalterms = list(self.simplify(repeated, operate, separate, argstot))
-        scalterms.extend(terms)
-        return tuple(scalterms)
+        argsscal = list(self.get_args_tensors(scalars=True))  
+        argsScal = sorted(self.get_args_Scalars(),key=key)   
+        if len(argsScal)==0:
+            argsscal.extend(tens)
+            return tuple(argsscal)
+        #print(argsScal,"ar")
+        terms = list(self.simplify(repeated, operate, separate, argsScal))
+        terms.extend(argsscal)
+        terms.extend(tens)
+        return tuple(terms)
 
         
     
@@ -909,7 +911,8 @@ class Serie(Expr):
         
     def get_order_by_tensors(self,args):
         return {i:args[i] for i in range(len(args)) }
-
+    
+    
 
     
 

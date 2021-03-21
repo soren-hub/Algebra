@@ -368,8 +368,9 @@ class Tensor(Expr,Contraction):
         return tuple(f for f in self.get_indices() if f.position != 2)
 
     def is_contracted(self):
-        for ind in self.get_indices():
-            return True if ind.get_position() == 2 else False 
+        condition = lambda i: isinstance(i,Index)
+        return False if all(map(condition,self.get_indices())) else True
+
                 
     def get_name(self):
         return self.name
@@ -616,7 +617,7 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         new_args = list(map(lambda f: left*f,expand_plus)) 
         return PlusTensors(*new_args)
     
-    def ignore_metric_contracted(self): 
+    def ignore_metric_contracted(self):
         Scalars=list(self.get_args_Scalars())
         args=self.get_args_tensors()
         plus_terms=list(filter(lambda t:isinstance(t,PlusTensors),args))
@@ -626,57 +627,48 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
             return PlusTensors(*new_args)
         pos=self.position_indices()
         inds_pos=sorted(pos,key=lambda tup:tup[1])
-        metrics_indpos=dict()
-        others_indpos=dict()
+        metrics_indpos=[]
+        others_indpos=[]
         aux=0
-        for term in args:                                            
+        for term in args:   
+            inds = term.get_indices()
+            qua_ind= aux + len(inds)               
             if isinstance(term,Metric): 
-                inds = term.get_indices()
-                qua_ind= aux + len(inds)
-                metrics_indpos[term] = inds_pos[aux:qua_ind]
-                aux= qua_ind
+                metrics_indpos.append((term,inds_pos[aux:qua_ind]))
             elif isinstance(term,Tensor):
-                inds = term.get_indices()
-                qua_ind= aux + len(inds)
-                others_indpos[term] = inds_pos[aux:qua_ind]
-                aux= qua_ind
-        if metrics_indpos==0:
-            tensor=list(others_indpos.keys())[0]
-            return tensor
-        if len(args)==2:
-            tensor = list(others_indpos.keys())[0]
-            return Tensor(tensor.get_name(),*self.not_free_index())
+ 
+                others_indpos.append((term,inds_pos[aux:qua_ind]))
+            aux= qua_ind
+        if len(metrics_indpos)==0:
+            return self
         new_args= []
-        for t,inds_t in others_indpos.items(): 
-            if len(t.not_free_index())==0:
-                new_args.append(t)
-            else: 
-                for m,inds_m in metrics_indpos.items(): 
-                    ind_m_contr = [(k,v) for k,v in inds_m 
-                                            if _check_contracted(k)]
-                    ind_t_contr = [(k,v) for k,v in inds_t 
-                                            if _check_contracted(k)]
-                    inds_t_c = [k for k,v in ind_t_contr]
-                    ind_m_c = ind_m_contr[0][0]
-                    if ind_m_c in inds_t_c: 
-                        freeind_t = [f for f in inds_t 
-                                        if not _check_contracted(f[0])]
-                        freeind_m = [k for k,v in inds_m 
-                                        if not _check_contracted(k)]
-                        new_indices=[]
-                        for ind,pos in ind_t_contr:
-                            if ind == ind_m_c:
-                                new_indices.append((freeind_m[0],pos))
-                            else:
-                                new_indices.append((ind,pos))
-                        new_indices.extend(freeind_t)   
-                        new_indices.sort(key=lambda tup:tup[1])
-                        name=t.get_name()
-                        new_indices=[k for k,v in new_indices]
-                        tensor=Tensor(name,*new_indices)
-                        new_args.append(tensor)    
-                    else:
-                        new_args.append(t) 
+        for t,inds_t in others_indpos: 
+            for m,inds_m in metrics_indpos:
+                ind_m_contr = [(k,v) for k,v in inds_m 
+                                        if _check_contracted(k)]
+                ind_t_contr = [(k,v) for k,v in inds_t 
+                                        if _check_contracted(k)]
+                inds_t_c = [k for k,v in ind_t_contr]
+                ind_m_c = ind_m_contr[0][0]
+                if ind_m_c in inds_t_c: 
+                    freeind_t = [f for f in inds_t 
+                                    if not _check_contracted(f[0])]
+                    freeind_m = [k for k,v in inds_m 
+                                    if not _check_contracted(k)]
+                    new_indices=[]
+                    for ind,pos in ind_t_contr:
+                        if ind == ind_m_c:
+                            new_indices.append((freeind_m[0],pos))
+                        else:
+                            new_indices.append((ind,pos))
+                    new_indices.extend(freeind_t)   
+                    new_indices.sort(key=lambda tup:tup[1])
+                    name=t.get_name()
+                    new_indices=[k for k,v in new_indices]
+                    tensor=Tensor(name,*new_indices)
+                    new_args.append(tensor)    
+                else:
+                    new_args.append(t) 
 
         new_args.extend(Scalars)
         return MultTensors(*new_args)
@@ -835,10 +827,91 @@ class DerivTensors(Tensor):
             return PlusTensors(*new_terms)
         else:
             return self 
-    
+
+class Metric (Tensor):
+
+    def __init__(self,name,*indices):
+        self.name = name 
+        self.indices = indices
+        self.args = (self.name,self.not_free_index())
+        self.contraction()
+        self._mhash= None 
+        self.scalar = self.is_scalar()
+        self.is_tensor = True    
 
 def invers_metric(exp,order=None):
-    background_metric=exp.args[0]
+    background_metric = exp.args[0]
+    invers_back = inverse_background_metric(background_metric)
+    new_inds = invers_back.get_indices()
+    unknown_tensor = Tensor("X",*new_inds)
+    #calculate equation 
+    terms = [invers_back,unknown_tensor]
+    serie_aux = Serie(terms,for_tensor=True)
+    all_terms = MultSeries(serie_aux,exp,for_tensor=True)
+    equation = all_terms.args[1]
+    tensor = resolute_equation(equation,unknown_tensor)
+    new_terms = [invers_back,tensor]
+    if order != None:
+        for i in range(order-1):
+            new_terms.append(unknown_tensor)
+            equation = new_terms[-2]*exp.args[1] + unknown_tensor*exp.args[0]
+            tensor = resolute_equation(equation,unknown_tensor)
+            new_terms.pop(-1)
+            new_terms.append(tensor)        
+    new_exp = Serie(new_terms,for_tensor=True)
+    return new_exp
+
+
+
+def change_name_inds(exp,indices):  
+    if isinstance(exp,MultTensors):
+        list_ind=sorted(indices,key=lambda ind:ind.get_name())
+        ind_pos=exp.position_indices(notfree=True)
+        notfreeind = dict(sorted(ind_pos,key=lambda tup:tup[0].get_name()))
+        new_indices = exp.position_indices(contracted=True)
+        not_change=[(i,p) for i,p in notfreeind.items() if i in list_ind ]
+        for ind in list_ind:
+            if not(ind in [i for i,p in not_change]):
+                for i,p in notfreeind.items(): 
+                    if not (i in [i for i,p in not_change]):
+                        new_indices.append((ind,p))
+        new_indices.extend(not_change)
+        new_indices.sort(key=lambda tup:tup[1])
+        new_indices=[k for k,v in new_indices]
+        Scalars = list(exp.get_args_Scalars())
+        new_mult = Scalars
+        tensors =list(exp.get_args_tensors())
+        aux=0
+        for t in tensors:  
+            inds = t.get_indices()
+            qua_ind= aux + len(inds)    
+            tensor=Tensor(t.get_name(),*new_indices[aux:qua_ind])
+            new_mult.append(tensor)
+            aux= qua_ind
+        term = MultTensors(*new_mult)
+        return term
+    elif isinstance(exp,Tensor): 
+        return Tensor(exp.get_name(),*indices)
+        
+        
+
+
+def resolute_equation(equation,unknown_tensor):  
+    equation = ignore_metric_contracted(equation)
+    #only for choice avaible letter
+    available = Contraction.letters_available(equation,serie=True).pop(0)
+    #to know the name index for contracted it 
+    notFreeind = equation.args[0].not_free_index()
+    name=[f.get_name() for f in notFreeind if f.position == 0][0]
+    metric = Metric("m",*(Index(name,1),Index(available,1)))
+    upind = ignore_metric_contracted(metric*equation)
+    condition = lambda f : f.get_name()!=unknown_tensor.get_name()
+    inds=unknown_tensor.get_indices()
+    filtered = [change_name_inds(f,inds) for f in upind.args if condition(f)]
+    exp=MultTensors(-1,*filtered)
+    return exp
+
+def inverse_background_metric(background_metric): 
     new_ind = []
     inds = background_metric.get_indices()
     for i in range(len(inds)):
@@ -851,49 +924,12 @@ def invers_metric(exp,order=None):
         else: 
             new_name = background_metric.letters_available().pop(0)
             new_ind.append(Index(new_name,1))
+    #make a terms unknown wich is first order of invers_metric
     backg_name=background_metric.get_name()
-    invert_background_metric = Metric(backg_name,*new_ind)
-    unknown_tensor = Tensor("X",*new_ind)
-    if order==None:
-        terms=[invert_background_metric,unknown_tensor]
-        serie_aux = Serie(terms,for_tensor=True)
-        all_terms = MultSeries(serie_aux,exp,for_tensor=True)
-    else: 
-        terms = [invert_background_metric,unknown_tensor]
-        new_args = [f for f in exp.args.values()]
-        serie_exp=Serie(new_args,for_tensor=True)
-        serie_aux = Serie(terms,for_tensor=True)
-        all_terms = MultSeries(serie_aux,serie_exp,for_tensor=True)
-    equation=ignore_metric_contracted(all_terms.args[1])
-    #only for choice avaible letter
-    available = Contraction.letters_available(equation,serie=True).pop(0)
-    #to know the name index for contracted it 
-    notFreeind = equation.args[0].not_free_index()
-    name=[f.get_name() for f in notFreeind if f.position == 0][0]
-    metric = Metric(backg_name,*(Index(name,1),Index(available,1)))
-    upind = ignore_metric_contracted(metric*equation)
-    condition = lambda f : f.get_name()!=unknown_tensor.get_name()
-    filtered = [f for f in upind.args if condition(f)]
-
-    result = MultTensors(-1,*filtered)
-    return result
+    return  Metric(backg_name,*new_ind)
+    
 
 
 
 
-
-    return all_terms
-
-
-
-
-class Metric (Tensor):
-
-    def __init__(self,name,*indices):
-        self.name = name 
-        self.indices = indices
-        self.args = (self.name,self.not_free_index())
-        self.contraction()
-        self._mhash= None 
-        self.scalar = self.is_scalar()
-        self.is_tensor = True 
+ 
