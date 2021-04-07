@@ -474,22 +474,12 @@ class Tensor(Expr,Contraction):
 
 
 #########preguntar por class TensPow 
+#preguntar por las modificaciones al archivo algebra 
                 
 
 class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative, 
               NullElement):
-    # Associative, Commutative, Identity, Cummulative, 
-    #NullElement
 
-    #preguntar por las modificaciones al archivo algebra 
-
-
-    """
-    no olvidar que falta implementar class metric 
-    que me sube y baja los indices, esto es importante para comparar 
-    multtensors ejemplo: 
-    R(^mu _nu) = metric(Çbeta Çbeta)* R(^mu _nu Çbeta Çbeta)   
-    """
   
     def __new__(cls, *args):
         if len(args) <= 1 :
@@ -518,7 +508,7 @@ class MultTensors(Tensor,Associative, Commutative, Identity, Cummulative,
         self.scalar = self.is_scalar()
 
     def get_name(self):
-        #solo para ordenar la suma 
+        #only sort PlusTensors method 
         name = None
         args = self.get_args_tensors()
         for arg in args: 
@@ -821,7 +811,7 @@ class DerivTensors(Tensor):
             return PlusTensors(*new_terms)
         elif isinstance(self.base,PlusTensors):
             terms = self.base.expanded().args
-            inds = self.indices#get_indices(deriv=True)
+            inds = self.indices
             funtion=lambda x:DerivTensors(x,*inds).expanded()
             new_terms = list(map(funtion,terms))
             return PlusTensors(*new_terms)
