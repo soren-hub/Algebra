@@ -2,7 +2,7 @@
 """
 Created on Sun Mar 7 16:03:23 2021
 
-@authors: Joaquín Rohland and Jorge Noreña  
+@authors: Joaquín Rohland
 
 """
 
