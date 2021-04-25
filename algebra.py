@@ -484,9 +484,6 @@ class ScalPow(Expr):
         return sp.Pow(sympy(self.base), sympy(self.exp))
     
     def expanded(self): 
-        """
-        mult
-        """
         terms = self.base.args
         if isinstance(self.base,Mult):
             new_args=list(map(lambda term :term**self.exp,terms))
@@ -966,10 +963,6 @@ class SeriePow(Serie):
     
     
 class PlusSeries(Serie):
-    
-    """ 
-    asumo que ambas series tienen la misma coordenada de expancion 
-    """
     
     def __new__(cls,*args): 
         instance = super(PlusSeries, cls).__new__(cls)
