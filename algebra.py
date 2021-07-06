@@ -6,6 +6,7 @@ Created on Fri Feb 26 22:21:55 2021
 """
 
 
+from tensors import DerivTensors
 import sympy as sp
 
 
@@ -502,9 +503,6 @@ class ScalPow(Expr):
         return sp.Pow(sympy(self.base), sympy(self.exp))
 
     def expanded(self):
-        """
-        mult
-        """
         terms = self.base.args
         if isinstance(self.base, Mult):
             new_args = list(map(lambda term: term ** self.exp, terms))
@@ -916,7 +914,7 @@ class Serie(Expr):
 
     def derived(self):
         terms = self.base.args
-        new_serie = [deriv(terms[f], self.coordinate) for f in terms]
+        new_serie = [DerivTensors(terms[f], self.coordinate) for f in terms]
         return Serie(*new_serie)
 
     def highest_order(self):
@@ -972,11 +970,6 @@ class SeriePow(Serie):
 
 
 class PlusSeries(Serie):
-
-    """ 
-    asumo que ambas series tienen la misma coordenada de expancion 
-    """
-
     def __new__(cls, *args):
         instance = super(PlusSeries, cls).__new__(cls)
         coordinate = args[0].coordinate
@@ -1041,6 +1034,3 @@ class MultSeries(Serie):
         serie_args = [f for f in args if isinstance(f, Serie)][0].args
         new_serie = [serie_args[i] * scalar for i in serie_args]
         return new_serie
-
-    def __repr__(self):
-        return super().__repr__()

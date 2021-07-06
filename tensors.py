@@ -84,7 +84,8 @@ def _type_letters_used(used):
     return latinletts if all(map(is_latin, used)) else grekkletts
 
 
-def indexs(names, listvar=[]):
+def indexs(names, listvar=None):
+    listvar = listvar or []
     if len(listvar) != 0:
         for i in range(len(listvar)):
             listvar[i] = Index(names[i][0], names[i][1])

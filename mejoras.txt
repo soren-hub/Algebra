@@ -1,0 +1,26 @@
+cuando quiera llamar una a un atributo, la manera correcta de hacerlo seria : 
+
+@property 
+def getargs(self):
+        return (self.name,)
+        
+y si quiero modificar el atributo deberia agregar :
+(si quiero que el atributo no se modifique solo debo quitar el script de abajo)
+@{nombre del metodo sin {}}.setter 
+ej: 
+@getargs.setter 
+def getargs(self,news_args):
+  self.args = news_args
+  
+cuando quiera llamar los atributos, al haber agregado property y setter, puedo hacerlo de la siguiente manera: 
+
+llamar 
+print(class.getargs )
+cambiar 
+class.getargs = news_args 
+
+esto se hace especialmente para los atributos que tengan _ 
+
+ejmplo :
+_args 
+_value 
